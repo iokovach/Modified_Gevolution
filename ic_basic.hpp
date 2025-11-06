@@ -717,83 +717,85 @@ void loadTransferFunctions(const char * filename, gsl_spline * & tk_delta, gsl_s
 	free(tk_t);
 }
 
-void loadPhiTransferFunctions(const char * filename, gsl_spline * & phi_tk, const double boxsize, const double h)
+void loadPhiTransferFunction(const char *filename, gsl_spline *&phi_tk, const double boxsize, const double h)
 {
     int i = 0, numpoints = 0;
-    double * k;
-    double * tk_phi;
+    double *k = nullptr;
+    double *tk_phi = nullptr;
 
-    if (parallel.grid_rank()[0] == 0) // read file
+    if (parallel.grid_rank()[0] == 0) // root process reads file
     {
-        FILE * tkfile;
+        FILE *tkfile;
         char line[MAX_LINESIZE];
         char format[MAX_LINESIZE];
-        char * ptr;
         double dummy[3];
         int kcol = -1, phicol = -1, colmax;
-        
-        line[MAX_LINESIZE-1] = 0;
-        
+        char *ptr = nullptr;
+
+        line[MAX_LINESIZE - 1] = 0;
+
         tkfile = fopen(filename, "r");
-        
         if (tkfile == NULL)
         {
             cerr << " proc#" << parallel.rank() << ": error in loadPhiTransferFunctions! Unable to open file " << filename << "." << endl;
             parallel.abortForce();
         }
-        
-        // Counting the number of data points
-        while (!feof(tkfile) && !ferror(tkfile))
-        {  
-            fgets(line, MAX_LINESIZE, tkfile);
-            if (line[MAX_LINESIZE-1] != 0)
+
+        // --- Count number of data lines (non-comment) ---
+        while (fgets(line, MAX_LINESIZE, tkfile))
+        {
+            if (line[MAX_LINESIZE - 1] != 0)
             {
-                cerr << " proc#" << parallel.rank() << ": error in loadPhiTransferFunctions! Character limit (" << (MAX_LINESIZE-1) << "/line) exceeded in file " << filename << "." << endl;
+                cerr << " proc#" << parallel.rank() << ": error in loadPhiTransferFunctions! Character limit (" << (MAX_LINESIZE - 1) << "/line) exceeded in file " << filename << "." << endl;
                 fclose(tkfile);
                 parallel.abortForce();
             }
-            
-            if (line[0] != '#' && !feof(tkfile) && !ferror(tkfile)) numpoints++;
+            if (line[0] != '#')
+                numpoints++;
         }
-        
+
         if (numpoints < 2)
         {
             cerr << " proc#" << parallel.rank() << ": error in loadPhiTransferFunctions! No valid data found in file " << filename << "." << endl;
             fclose(tkfile);
             parallel.abortForce();
         }
-        
-        // Allocate memory for the transfer functions
-        k = (double *) malloc(sizeof(double) * numpoints);
-        tk_phi = (double *) malloc(sizeof(double) * numpoints);
-        
+
+        // Allocate memory
+        k = (double *)malloc(sizeof(double) * numpoints);
+        tk_phi = (double *)malloc(sizeof(double) * numpoints);
         if (k == NULL || tk_phi == NULL)
         {
             cerr << " proc#" << parallel.rank() << ": error in loadPhiTransferFunctions! Memory error." << endl;
             fclose(tkfile);
             parallel.abortForce();
         }
-        
+
         rewind(tkfile);
 
-		while (!feof(tkfile) && !ferror(tkfile))
-		{   
-			fgets(line, MAX_LINESIZE, tkfile);
+        // --- Find column indices for k and phi ---
+        while (fgets(line, MAX_LINESIZE, tkfile))
+        {
+            char *token = strtok(line, " \t\n");
+            int col = 0;
+            while (token != NULL)
+            {
+                if (strchr(token, ':'))
+                {
+                    if (strstr(token, "k(h/Mpc)"))
+                        kcol = col;
+                    else if (strstr(token, "phi"))
+                        phicol = col;
+                }
+                token = strtok(NULL, " \t\n");
+                col++;
+            }
+            if (kcol >= 0 && phicol >= 0)
+                break;
+        }
 
-			for (ptr = line, i = 0; (ptr = strchr(ptr, ':')) != NULL; i++)
-			{
-				ptr++;
-				if (*ptr == 'k') kcol = i;
-				else if (*ptr == 'p')
-				{
-					if (strncmp(ptr+0, "phi", 3) == 0) phicol = i;
-				}
-		
-			if (kcol >= 0 && phicol >= 0) break;
-			}
-		}
-		COUT << "phicol is " << phicol <<endl;
-		
+        COUT << "Detected columns: kcol = " << kcol << ", phicol = " << phicol << endl;
+
         if (kcol < 0 || phicol < 0)
         {
             cerr << " proc#" << parallel.rank() << ": error in loadPhiTransferFunctions! Unable to identify requested columns!" << endl;
@@ -802,118 +804,106 @@ void loadPhiTransferFunctions(const char * filename, gsl_spline * & phi_tk, cons
             free(tk_phi);
             parallel.abortForce();
         }
-        
-		// Assuming kcol = 0 and phicol = 6
-		colmax = phicol+1;  // Assuming colmax is set to the correct number of columns
-		for (i = 0, ptr = format; i < colmax; i++) {
-		    if (i == kcol || i == phicol) {
-		        strncpy(ptr, " %lf", 4);  // "%lf" is 4 characters long
-		        ptr += 4;  // Move pointer by 4 to accommodate "%lf"
-		    } else {
-		        strncpy(ptr, " %*lf", 5);  // "%*lf" is 5 characters long
-		        ptr += 5;  // Move pointer by 5 to accommodate "%*lf"
-		    }
-		}
 
-		// Null-terminate the format string after the loop
-		*ptr = '\0';  // Ensure the format string is properly terminated
+        // --- Build format string dynamically ---
+        ptr = format;
+        colmax = (kcol > phicol) ? kcol : phicol;
+        for (int j = 0; j <= colmax; ++j)
+        {
+            if (j == kcol || j == phicol)
+                ptr += sprintf(ptr, " %%lf");
+            else
+                ptr += sprintf(ptr, " %%*lf");
+        }
+        *ptr = '\0';
 
-		// Print the format string to debug
-		COUT << "Format string: " << format << endl;
+        COUT << "Format string: " << format << endl;
 
-		// Read the line using sscanf
-		int ret = sscanf(line, format, dummy, dummy+1, dummy+2);
-		COUT << "sscanf returned: " << ret << endl;
+        rewind(tkfile);
+        i = 0;
 
-		// Print parsed values for debugging
-		COUT << "Parsed values: k = " << dummy[kcol] << ", phi = " << dummy[phicol] << endl;
+        // --- Read file data ---
+        while (fgets(line, MAX_LINESIZE, tkfile))
+        {
+            if (line[0] == '#' || strlen(line) < 3)
+                continue;
 
-		rewind(tkfile);
+            double v0 = 0.0, v1 = 0.0;
+            int ret = sscanf(line, format, &v0, &v1);
 
-		i = 0;
-		while (!feof(tkfile) && !ferror(tkfile))
-		{   
-			fgets(line, MAX_LINESIZE, tkfile);
-			/*COUT << "line is" << line << endl;
+            if (ret == 2)
+            {
+                double kval = (kcol < phicol) ? v0 : v1;
+                double phival = (kcol < phicol) ? v1 : v0;
 
-			COUT << "sscanf is" << sscanf(line, format, dummy, dummy+1, dummy+2) << endl;
+                if (kval < 0.0)
+                {
+                    cerr << " proc#" << parallel.rank() << ": error in loadPhiTransferFunctions! Negative k-value encountered." << endl;
+                    free(k);
+                    free(tk_phi);
+                    fclose(tkfile);
+                    parallel.abortForce();
+                }
 
-			COUT << "dummy is" << dummy << endl;*/
-			// Parse the line based on the format string
-			if (sscanf(line, format, dummy, dummy+1) == 2 && !feof(tkfile) && !ferror(tkfile))
-			{
-				// Debug: Print out the values read from the line
-				COUT << "Parsed values: k = " << dummy[kcol] << ", phi = " << dummy[phicol] << endl;
-		
-				// Check if the k value is negative
-				if (dummy[kcol] < 0.)
-				{
-					cerr << " proc#" << parallel.rank() << ": error in loadPhiTransferFunctions! Negative k-value encountered." << endl;
-					free(k);
-					free(tk_phi);
-					fclose(tkfile);
-					parallel.abortForce();
-				}
-		
-				// Ensure k-values are strictly ordered
-				if (i > 0)
-				{
-					if (k[i-1] >= dummy[kcol] * boxsize)
-					{
-						cerr << " proc#" << parallel.rank() << ": error in loadPhiTransferFunctions! k-values are not strictly ordered." << endl;
-						free(k);
-						free(tk_phi);
-						fclose(tkfile);
-						parallel.abortForce();
-					}
-				}
-		
-				// Store the values in the arrays
-				k[i] = dummy[kcol] * boxsize;
-				tk_phi[i] = dummy[phicol];
-				i++;
-			}
-		}
+                if (i > 0 && k[i - 1] >= kval * boxsize)
+                {
+                    cerr << " proc#" << parallel.rank() << ": error in loadPhiTransferFunctions! k-values are not strictly ordered." << endl;
+                    free(k);
+                    free(tk_phi);
+                    fclose(tkfile);
+                    parallel.abortForce();
+                }
 
-		COUT << "i is" << i << endl;
+                k[i] = kval * boxsize;
+                tk_phi[i] = phival;
 
-		// Check if the number of points matches the expected numpoints
-		if (i != numpoints)
-		{
-			cerr << " proc#" << parallel.rank() << ": error in loadPhiTransferFunctions! File may have changed or file pointer corrupted." << endl;
-			free(k);
-			free(tk_phi);
-			parallel.abortForce();
-		}
+                // Optional debug print
+                //COUT << "Parsed line " << i << ": k = " << k[i] << ", phi = " << tk_phi[i] << endl;
+
+                i++;
+            }
+        }
+
+        fclose(tkfile);
+
+        COUT << "Total parsed points: " << i << endl;
+
+        if (i != numpoints)
+        {
+            cerr << " proc#" << parallel.rank() << ": error in loadPhiTransferFunctions! File may have changed or file pointer corrupted." << endl;
+            free(k);
+            free(tk_phi);
+            parallel.abortForce();
+        }
 
         parallel.broadcast_dim0<int>(numpoints, 0);
     }
     else
     {
         parallel.broadcast_dim0<int>(numpoints, 0);
-        
         if (numpoints < 2)
         {
             cerr << " proc#" << parallel.rank() << ": error in loadPhiTransferFunctions! Communication error." << endl;
             parallel.abortForce();
         }
-        
-        k = (double *) malloc(sizeof(double) * numpoints);
-        tk_phi = (double *) malloc(sizeof(double) * numpoints);
-        
+
+        k = (double *)malloc(sizeof(double) * numpoints);
+        tk_phi = (double *)malloc(sizeof(double) * numpoints);
         if (k == NULL || tk_phi == NULL)
         {
             cerr << " proc#" << parallel.rank() << ": error in loadPhiTransferFunctions! Memory error." << endl;
             parallel.abortForce();
         }
     }
-    
+
+    // --- Distribute data across processes ---
     parallel.broadcast_dim0<double>(k, numpoints, 0);
     parallel.broadcast_dim0<double>(tk_phi, numpoints, 0);
-    
+
+    // --- Initialize spline ---
     phi_tk = gsl_spline_alloc(gsl_interp_cspline, numpoints);
     gsl_spline_init(phi_tk, k, tk_phi, numpoints);
-    
+
     free(k);
     free(tk_phi);
 }
@@ -1919,10 +1909,13 @@ void generateIC_basic(metadata & sim, icsettings & ic, cosmology & cosmo, const 
 		rescale = 3. * Hconf(a, dm, rad, dcdm, fourpiG, cosmo) * Hconf(a, dm, rad, dcdm, fourpiG, cosmo) * Hconf(a, dm, rad, dcdm, fourpiG, cosmo) * (1. + 0.5 * Hconf(a, dm, rad, dcdm, fourpiG, cosmo) * Hconf(a, dm, rad, dcdm, fourpiG, cosmo) * ((1. / Hconf(0.98 * a, dm, rad, dcdm, fourpiG, cosmo) / Hconf(0.98 * a, dm, rad, dcdm, fourpiG, cosmo)) - (8. / Hconf(0.99 * a, dm, rad, dcdm, fourpiG, cosmo) / Hconf(0.99 * a, dm, rad, dcdm, fourpiG, cosmo)) + (8. / Hconf(1.01 * a, dm, rad, dcdm, fourpiG, cosmo) / Hconf(1.01 * a, dm, rad, dcdm, fourpiG, cosmo)) - (1. / Hconf(1.02 * a, dm, rad, dcdm, fourpiG, cosmo) / Hconf(1.02 * a, dm, rad, dcdm, fourpiG, cosmo))) / 0.12);
 
 		COUT << "rescale is" << rescale << endl;
+		
+		loadPhiTransferFunction(ic.tkfile, tk_phi, sim.boxsize, cosmo.h);
 
 		for (i = 0; i < tk_d1->size; i++) // construct phi
-			temp1[i] = (1.5* (Hconf(a, dm, rad, dcdm, fourpiG, cosmo) * Hconf(a, dm, rad, dcdm, fourpiG, cosmo) - Hconf(1., dm, rad, dcdm, fourpiG, cosmo) * Hconf(1., dm, rad, dcdm, fourpiG, cosmo) * a * a * cosmo.Omega_Lambda) * tk_d1->y[i] + rescale * tk_t1->y[i] /tk_t1->x[i]/tk_t1->x[i] ) * M_PI * sqrt(Pk_primordial(tk_d1->x[i] * cosmo.h / sim.boxsize, ic) / tk_d1->x[i])/tk_d1->x[i] ;
-
+			//temp1[i] = (1.5* (Hconf(a, dm, rad, dcdm, fourpiG, cosmo) * Hconf(a, dm, rad, dcdm, fourpiG, cosmo) - Hconf(1., 0., 1., 0., fourpiG, cosmo) * Hconf(1., 0., 1., 0., fourpiG, cosmo) * a * a * cosmo.Omega_Lambda) * tk_d1->y[i] + rescale * tk_t1->y[i] /tk_t1->x[i]/tk_t1->x[i] ) * M_PI * sqrt(Pk_primordial(tk_d1->x[i] * cosmo.h / sim.boxsize, ic) / tk_d1->x[i])/tk_d1->x[i] ;
+			//temp1[i] = ( 1e-10 * rescale * tk_t1->y[i] /tk_t1->x[i]/tk_t1->x[i] ) * M_PI * sqrt(Pk_primordial(tk_d1->x[i] * cosmo.h / sim.boxsize, ic) / tk_d1->x[i])/tk_d1->x[i] ;
+			temp1[i] = -tk_phi->y[i] * tk_d1->x[i] *tk_d1->x[i] *M_PI * sqrt(Pk_primordial(tk_d1->x[i] * cosmo.h / sim.boxsize, ic) / tk_d1->x[i]) / tk_d1->x[i] ;
 			
 		for (i = 0; i < tk_t1->size; i++) // construct gauge correction for N-body gauge (3 Hconf theta_tot / k^2)
 			
@@ -1978,7 +1971,7 @@ void generateIC_basic(metadata & sim, icsettings & ic, cosmology & cosmo, const 
 			if (sim.gr_flag > 0)
 			{
 				for (i = 0; i < tk_d1->size; i++)
-					temp1[i] =-3. * pkspline->y[i] / pkspline->x[i] / pkspline->x[i]  - ((cosmo.Omega_cdm * tk_d1->y[i] + cosmo.Omega_b * tk_d2->y[i]) / (cosmo.Omega_cdm + cosmo.Omega_b)) * M_PI * sqrt(Pk_primordial(tk_d1->x[i] * cosmo.h / sim.boxsize, ic) / tk_d1->x[i]) / tk_d1->x[i];
+					temp1[i] =-3. * pkspline->y[i] / pkspline->x[i] / pkspline->x[i]  - (((dm+dcdm) * tk_d1->y[i] + cosmo.Omega_b * tk_d2->y[i]) / ((dm+dcdm) + cosmo.Omega_b)) * M_PI * sqrt(Pk_primordial(tk_d1->x[i] * cosmo.h / sim.boxsize, ic) / tk_d1->x[i]) / tk_d1->x[i];
 			}
 			else
 			{
@@ -2010,7 +2003,7 @@ void generateIC_basic(metadata & sim, icsettings & ic, cosmology & cosmo, const 
 			gsl_spline_free(tk_t2);
 		}
 
-		std::string filename = std::string(sim.output_path) + "/temp2_output.dat";
+		std::string filename = std::string(sim.output_path) + "/pkspline_output.dat";
 		std::ofstream outfile(filename);
 	
 		// Print header for the data file
@@ -2020,7 +2013,7 @@ void generateIC_basic(metadata & sim, icsettings & ic, cosmology & cosmo, const 
 		// Evaluate the spline for each k and write to the file
 		for (i = 0; i < tk_d1->size; i++) {
 			double k = tk_d1->x[i];
-			double y = gsl_spline_eval(tk_t1, k, nullptr);  // Evaluate the spline at k
+			double y = gsl_spline_eval(pkspline, k, nullptr);  // Evaluate the spline at k
 			outfile << k << " " << y << std::endl;  // Write the k and spline(k) to the file
 		}
 	
@@ -2028,7 +2021,6 @@ void generateIC_basic(metadata & sim, icsettings & ic, cosmology & cosmo, const 
 		outfile.close();
 
 		//this is the one that hits baryon_flag == 2. OK! 
-
 
 		generateDisplacementField(*scalarFT, 0., tk_d1, (unsigned int) ic.seed, ic.flags & ICFLAG_KSPHERE);
 		gsl_spline_free(tk_d1);
@@ -2198,7 +2190,9 @@ void generateIC_basic(metadata & sim, icsettings & ic, cosmology & cosmo, const 
 		if (kFT.coord(0) == 0 && kFT.coord(1) == 0 && kFT.coord(2) == 0)
 			(*scalarFT)(kFT) = Cplx(0.,0.);
 				
+		//cout << "Solving Modified P" << endl;
 		solveModifiedPoissonFT(*scalarFT, *scalarFT, fourpiG / a, 3. * sim.gr_flag * (Hconf(a, dm, rad, dcdm, fourpiG, cosmo) * Hconf(a, dm, rad, dcdm, fourpiG, cosmo) + fourpiG * cosmo.Omega_m / a));
+		//solveModifiedPoissonFT(*scalarFT, *scalarFT, fourpiG / a, 0);
 	}
 	
 	plan_phi->execute(FFT_BACKWARD);

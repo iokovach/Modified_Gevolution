@@ -601,7 +601,10 @@ int main(int argc, char **argv)
 	}
 
 // // EXACT_OUTPUT_REDSHIFTS
-
+		//override stopping conditions if we are running til a certain cycle #
+		if (sim.restart_cycle<=1)
+		{
+		//COUT << "restart cycle 0, I'm stopping!" <<endl;
 		if (sim.pk_flag>0)
 			{
 			if (snapcount >= sim.num_snapshot)
@@ -624,7 +627,7 @@ int main(int argc, char **argv)
 				break; // simulation complete
 			}	
 			}
-
+		}
 
 //put back particle update
 
