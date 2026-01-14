@@ -60,14 +60,14 @@ void prepareFTsource(Field<FieldType> & phi, Field<FieldType> & Tij, Field<Field
 	
 	for (x.first(); x.test(); x.next())
 	{
-		Sij(x, 0, 0) = 0.0;
-		Sij(x, 1, 1) = 0.0;
-		Sij(x, 2, 2) = 0.0;
-		Sij(x, 0, 1) = 0.0;
-		Sij(x, 0, 2) = 0.0;
-		Sij(x, 1, 2) = 0.0;
+		//Sij(x, 0, 0) = 0.0;
+		//Sij(x, 1, 1) = 0.0;
+		//Sij(x, 2, 2) = 0.0;
+		//Sij(x, 0, 1) = 0.0;
+		//Sij(x, 0, 2) = 0.0;
+		//Sij(x, 1, 2) = 0.0;
 		// 0-0-component:
-		//Sij(x, 0, 0) = coeff * Tij(x, 0, 0);
+		Sij(x, 0, 0) = coeff * Tij(x, 0, 0);
 #ifdef PHINONLINEAR
 #ifdef ORIGINALMETRIC
 		Sij(x, 0, 0) -= 4. * phi(x) * (phi(x-0) + phi(x+0) - 2. * phi(x));
@@ -78,7 +78,7 @@ void prepareFTsource(Field<FieldType> & phi, Field<FieldType> & Tij, Field<Field
 #endif
 
 		// 1-1-component:
-		//Sij(x, 1, 1) = coeff * Tij(x, 1, 1);
+		Sij(x, 1, 1) = coeff * Tij(x, 1, 1);
 #ifdef PHINONLINEAR
 #ifdef ORIGINALMETRIC
 		Sij(x, 1, 1) -= 4. * phi(x) * (phi(x-1) + phi(x+1) - 2. * phi(x));
@@ -89,7 +89,7 @@ void prepareFTsource(Field<FieldType> & phi, Field<FieldType> & Tij, Field<Field
 #endif
 
 		// 2-2-component:
-		//Sij(x, 2, 2) = coeff * Tij(x, 2, 2);
+		Sij(x, 2, 2) = coeff * Tij(x, 2, 2);
 #ifdef PHINONLINEAR
 #ifdef ORIGINALMETRIC
 		Sij(x, 2, 2) -= 4. * phi(x) * (phi(x-2) + phi(x+2) - 2. * phi(x));
@@ -100,7 +100,7 @@ void prepareFTsource(Field<FieldType> & phi, Field<FieldType> & Tij, Field<Field
 #endif
 
 		// 0-1-component:
-		//Sij(x, 0, 1) = coeff * Tij(x, 0, 1);
+		Sij(x, 0, 1) = coeff * Tij(x, 0, 1);
 #ifdef PHINONLINEAR
 		Sij(x, 0, 1) += phi(x+0) * phi(x+1) - phi(x) * phi(x+0+1);
 #ifdef ORIGINALMETRIC
@@ -117,7 +117,7 @@ void prepareFTsource(Field<FieldType> & phi, Field<FieldType> & Tij, Field<Field
 #endif
 
 		// 0-2-component:
-		//Sij(x, 0, 2) = coeff * Tij(x, 0, 2);
+		Sij(x, 0, 2) = coeff * Tij(x, 0, 2);
 #ifdef PHINONLINEAR
 		Sij(x, 0, 2) += phi(x+0) * phi(x+2) - phi(x) * phi(x+0+2);
 #ifdef ORIGINALMETRIC
@@ -134,7 +134,7 @@ void prepareFTsource(Field<FieldType> & phi, Field<FieldType> & Tij, Field<Field
 #endif
 
 		// 1-2-component:
-		//Sij(x, 1, 2) = coeff * Tij(x, 1, 2);
+		Sij(x, 1, 2) = coeff * Tij(x, 1, 2);
 #ifdef PHINONLINEAR
 		Sij(x, 1, 2) += phi(x+1) * phi(x+2) - phi(x) * phi(x+1+2);
 #ifdef ORIGINALMETRIC
@@ -410,6 +410,8 @@ void projectFTvector(Field<Cplx> & SiFT, Field<Cplx> & BiFT, const Real coeff = 
 //   hijFT      reference to allocated field which will contain the Fourier
 //              image of the transverse trace-free tensor component
 //
+//.     I am modifying this to compute SijTT only rather than QS approx hij. So I make k6 = k^4/ 2
+//
 // Returns:
 // 
 //////////////////////////
@@ -453,7 +455,7 @@ void projectFTtensor(Field<Cplx> & SijFT, Field<Cplx> & hijFT)
 		SzzFT = SijFT(k, 2, 2);
 		
 		k2 = gridk2[k.coord(0)] + gridk2[k.coord(1)] + gridk2[k.coord(2)];
-		k6 = k2 * k2 * k2 * linesize;
+		k6 = k2 * k2 / 2;
 		
 		hijFT(k, 0, 0) = ((gridk2[k.coord(0)] - k2) * ((gridk2[k.coord(0)] - k2) * SxxFT + 2. * kshift[k.coord(0)] * (kshift[k.coord(1)] * SxyFT + kshift[k.coord(2)] * SxzFT))
 				+ ((gridk2[k.coord(0)] + k2) * (gridk2[k.coord(1)] + k2) - 2. * k2 * k2) * SyyFT
@@ -486,7 +488,6 @@ void projectFTtensor(Field<Cplx> & SijFT, Field<Cplx> & hijFT)
 	free(gridk2);
 	free(kshift);
 }
-
 
 //////////////////////////
 // solveModifiedPoissonFT

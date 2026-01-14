@@ -228,7 +228,6 @@ int main(int argc, char **argv)
 	PlanFFT<Cplx> plan_vi(&vi, &viFT);
 #endif
 
-
 	update_cdm_fields[0] = &phi;
 	update_cdm_fields[1] = &chi;
 	update_cdm_fields[2] = &Bi;
@@ -279,10 +278,15 @@ int main(int argc, char **argv)
 	COUT << "initial volume times critical density = " <<  3* Hconf(a, dm, rad, dcdm, fourpiG, cosmo) * Hconf(a, dm, rad, dcdm, fourpiG, cosmo)/(2*fourpiG*a*a) << endl;
 	
 	if (sim.Cf * dx < sim.steplimit / Hconf(a, dm, rad, dcdm, fourpiG, cosmo))
-		dtau = sim.Cf * dx;
+    {
+        dtau = sim.Cf * dx;
+        COUT << "dtau init via CF" << endl;
+    }
 	else
+    {
 		dtau = sim.steplimit / Hconf(a, dm, rad, dcdm, fourpiG, cosmo);
-
+        COUT << "dtau init via H" << endl;
+    }
 	COUT << "time step" << dtau <<endl;
 	
 	if (ic.generator == ICGEN_BASIC)
@@ -323,8 +327,6 @@ int main(int argc, char **argv)
 
 	while (true)    // main loop
 	{
-		//Can I change the mass easily?
-
 		pcls_cdm.parts_info()->mass = ((dm+dcdm) / (Real) (sim.numpcl[0]));
 		
 		// construct stress-energy tensor
@@ -652,7 +654,7 @@ int main(int argc, char **argv)
 		a_old = a;	
 	
 		rungekutta4bg(a, dm, rad, dcdm, fourpiG, cosmo, 0.5 * dtau);  // evolve background by half a time step
-
+        
 		f_params[0] = a;
 		f_params[1] = a * a * sim.numpts;
 		if (sim.gr_flag > 0)
@@ -672,7 +674,7 @@ int main(int argc, char **argv)
 //background evolution
 
 		rungekutta4bg(a, dm, rad, dcdm, fourpiG, cosmo, 0.5 * dtau);  // evolve background by half a time step
-
+        
 		a_old = 0;
 //
 		// done particle update
@@ -743,9 +745,15 @@ int main(int argc, char **argv)
 		dtau_old = dtau;
 		
 		if (sim.Cf * dx < sim.steplimit / Hconf(a, dm, rad, dcdm, fourpiG, cosmo))
+        {
 			dtau = sim.Cf * dx;
+            COUT << "dtau for this step via CF" << endl;
+        }
 		else
+        {
 			dtau = sim.steplimit / Hconf(a, dm, rad, dcdm, fourpiG, cosmo);
+            COUT << "dtau for this step via H" << endl;    
+        }
 		   
 		cycle++;
 		
