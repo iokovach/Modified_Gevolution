@@ -277,15 +277,20 @@ int main(int argc, char **argv)
 
 	COUT << "initial volume times critical density = " <<  3* Hconf(a, dm, rad, dcdm, fourpiG, cosmo) * Hconf(a, dm, rad, dcdm, fourpiG, cosmo)/(2*fourpiG*a*a) << endl;
 	
+    if (cycle < 10)
+        dtau = sim.earlysteplimit / Hconf(a, dm, rad, dcdm, fourpiG, cosmo);
+    else
+    {
 	if (sim.Cf * dx < sim.steplimit / Hconf(a, dm, rad, dcdm, fourpiG, cosmo))
     {
-        dtau = sim.Cf * dx;
-        COUT << "dtau init via CF" << endl;
+		dtau = sim.Cf * dx;
+        COUT << "dtau for this step via CF" << endl;
     }
 	else
     {
 		dtau = sim.steplimit / Hconf(a, dm, rad, dcdm, fourpiG, cosmo);
-        COUT << "dtau init via H" << endl;
+        COUT << "dtau for this step via H" << endl;    
+    }
     }
 	COUT << "time step" << dtau <<endl;
 	
@@ -604,11 +609,11 @@ int main(int argc, char **argv)
 
 // // EXACT_OUTPUT_REDSHIFTS
 		//override stopping conditions if we are running til a certain cycle #
-		if (sim.restart_cycle<=1)
+		if (sim.restart_cycle<1)
 		{
 		//COUT << "restart cycle 0, I'm stopping!" <<endl;
 		if (sim.pk_flag>0)
-			{
+			{//writing pk every step
 			if (snapcount >= sim.num_snapshot)
 			{
 				break; // simulation complete
@@ -616,14 +621,14 @@ int main(int argc, char **argv)
 			}
 		
 		if (sim.snap_flag>0)
-			{
+			{//writing snaps every step
 			if (pkcount >= sim.num_pk)
 			{
 				break; // simulation complete
 			}	
 			}
 		if (sim.pk_flag==0 && sim.snap_flag ==0)
-			{
+			{//default stop is stop when we write all pks
 			if (pkcount >= sim.num_pk)
 			{
 				break; // simulation complete
@@ -704,46 +709,35 @@ int main(int argc, char **argv)
 			}
 		}
 		
-		if (restartcount < sim.num_restart && 1. / a < sim.z_restart[restartcount] + 1.)
-		{
-			COUT << COLORTEXT_CYAN << " writing hibernation point" << COLORTEXT_RESET << " at z = " << ((1./a) - 1.) <<  " (cycle " << cycle << "), tau/boxsize = " << tau << endl;
-			if (sim.vector_flag == VECTOR_PARABOLIC && sim.gr_flag == 0)
-				plan_Bi.execute(FFT_BACKWARD);
-#ifdef CHECK_B
-			if (sim.vector_flag == VECTOR_ELLIPTIC)
-			{
-				plan_Bi_check.execute(FFT_BACKWARD);
-				hibernate(sim, ic, cosmo, &pcls_cdm, &pcls_b, pcls_ncdm, phi, chi, Bi_check, a, dm, rad, dcdm, tau, dtau, cycle, restartcount);
-			}
-			else
-#endif
-			hibernate(sim, ic, cosmo, &pcls_cdm, &pcls_b, pcls_ncdm, phi, chi, Bi, a,dm, rad, dcdm, tau, dtau, cycle, restartcount);
-			restartcount++;
-		}
-		
+
 	//New condition for restarting--restart cycle
-		
-		if (cycle == ic.restart_cycle + sim.restart_cycle)
-		{
-			COUT << COLORTEXT_CYAN << " writing hibernation point" << COLORTEXT_RESET << " at z = " << ((1./a) - 1.) <<  " (cycle " << cycle << "), tau/boxsize = " << tau << endl;
-			if (sim.vector_flag == VECTOR_PARABOLIC && sim.gr_flag == 0)
-				plan_Bi.execute(FFT_BACKWARD);
-#ifdef CHECK_B
-			if (sim.vector_flag == VECTOR_ELLIPTIC)
-			{
-				plan_Bi_check.execute(FFT_BACKWARD);
-				hibernate(sim, ic, cosmo, &pcls_cdm, &pcls_b, pcls_ncdm, phi, chi, Bi_check, a, dm, rad, dcdm, tau, dtau, cycle, restartcount);
-			}
-			else
-#endif
-			hibernate(sim, ic, cosmo, &pcls_cdm, &pcls_b, pcls_ncdm, phi, chi, Bi, a, dm, rad, dcdm, tau, dtau, cycle, restartcount);
-			restartcount++;
-			break; 
-		}
-		
-		
+		if (sim.restart_cycle > 0)
+        {
+    		if (cycle == ic.restart_cycle + sim.restart_cycle)
+    		{
+    			COUT << COLORTEXT_CYAN << " writing hibernation point" << COLORTEXT_RESET << " at z = " << ((1./a) - 1.) <<  " (cycle " << cycle << "), tau/boxsize = " << tau << endl;
+    			if (sim.vector_flag == VECTOR_PARABOLIC && sim.gr_flag == 0)
+    				plan_Bi.execute(FFT_BACKWARD);
+    #ifdef CHECK_B
+    			if (sim.vector_flag == VECTOR_ELLIPTIC)
+    			{
+    				plan_Bi_check.execute(FFT_BACKWARD);
+    				hibernate(sim, ic, cosmo, &pcls_cdm, &pcls_b, pcls_ncdm, phi, chi, Bi_check, a, dm, rad, dcdm, tau, dtau, cycle, restartcount);
+    			}
+    			else
+    #endif
+    			hibernate(sim, ic, cosmo, &pcls_cdm, &pcls_b, pcls_ncdm, phi, chi, Bi, a, dm, rad, dcdm, tau, dtau, cycle, restartcount);
+    			restartcount++;
+    			break; 
+    		}
+        }
+        
 		dtau_old = dtau;
-		
+        //make first 10 steps small
+        if (cycle < 10)
+            dtau = sim.earlysteplimit / Hconf(a, dm, rad, dcdm, fourpiG, cosmo);
+        else
+        {
 		if (sim.Cf * dx < sim.steplimit / Hconf(a, dm, rad, dcdm, fourpiG, cosmo))
         {
 			dtau = sim.Cf * dx;
@@ -754,7 +748,7 @@ int main(int argc, char **argv)
 			dtau = sim.steplimit / Hconf(a, dm, rad, dcdm, fourpiG, cosmo);
             COUT << "dtau for this step via H" << endl;    
         }
-		   
+        }
 		cycle++;
 		
 	}

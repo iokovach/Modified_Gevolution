@@ -268,8 +268,8 @@ double particleHorizon(const double a, const double fourpiG, cosmology & cosmo)
 	
 	f.function = &initialparticleHorizonIntegrand;
 	f.params = &cosmo;
-	
-	gsl_integration_qng(&f, sqrt(a) * 1.0e-7, sqrt(a), 5.0e-7, 1.0e-7, &result, &err, &n);
+	// lower, upper, absolute tolerance, relative tolerance
+	gsl_integration_qng(&f, sqrt(a) * 1.0e-7, sqrt(a), 5.0e-6, 1.0e-6, &result, &err, &n);
 	
 	return result / sqrt(fourpiG);
 }

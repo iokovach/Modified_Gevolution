@@ -1165,6 +1165,7 @@ int parseMetadata(parameter * & params, const int numparam, metadata & sim, cosm
 	for (i = 0; i < MAX_PCL_SPECIES; i++) sim.tracer_factor[i] = 1;
 	sim.Cf = 1.;
 	sim.steplimit = 1.;
+	sim.earlysteplimit = 1.;
 	sim.boxsize = -1.;
 	sim.wallclocklimit = -1.;
 	sim.z_in = 0.;
@@ -1250,6 +1251,7 @@ int parseMetadata(parameter * & params, const int numparam, metadata & sim, cosm
 	if (ic.Cf < 0.) ic.Cf = sim.Cf;
 	
 	parseParameter(params, numparam, "time step limit", sim.steplimit);
+	parseParameter(params, numparam, "early time step limit", sim.earlysteplimit);
 	
 	if (!parseParameter(params, numparam, "move limit", sim.movelimit))
 		sim.movelimit = (double) sim.numpts;

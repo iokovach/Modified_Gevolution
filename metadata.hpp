@@ -227,6 +227,7 @@ struct metadata
 	double Cf;
 	double movelimit;
 	double steplimit;
+	double earlysteplimit;
 	double boxsize;
 	double wallclocklimit;
 	double pixelfactor[MAX_OUTPUTS];

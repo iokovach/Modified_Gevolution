@@ -670,7 +670,7 @@ Real update_q(double dtau, double dx, part_simple * part, double * ref_dist, par
 	v2 = 0.;
 	for (int i=0;i<3;i++)
 	{
-		(*part).vel[i] -= dtau * e2 * gradphi[i] / dx;
+		(*part).vel[i] -=  dtau*e2 * gradphi[i] / dx;
 		v2 += (*part).vel[i] * (*part).vel[i];
 	}
 	
@@ -1280,7 +1280,6 @@ void projection_Tij_project(Particles<part, part_info, part_dataType> * pcls, Fi
 				
 			}
 			
-			
 			for (int i=0; i<3; i++) (*Tij)(xTij,i,i) += tii[8*i];
 			(*Tij)(xTij,0,1) += tij[0];
 			(*Tij)(xTij,0,2) += tij[2];
@@ -1307,7 +1306,108 @@ void projection_Tij_project(Particles<part, part_info, part_dataType> * pcls, Fi
 #define projection_Tij_comm symtensorProjectionCICNGP_comm
 #endif
 
+/*
+//This just makes Tij a velocity field squared
+template<typename part, typename part_info, typename part_dataType>
+void projection_Tij_project(Particles<part, part_info, part_dataType> * pcls, Field<Real> * Tij, double a = 1., Field<Real> * phi = NULL, double coeff = 1.)
+{	
+	if (Tij->lattice().halo() == 0)
+	{
+		cout<< "projection_Tij_project: target field needs halo > 0" << endl;
+		exit(-1);
+	}
+	
+	Site xPart(pcls->lattice());
+	Site xTij(Tij->lattice());
+	
+	typename std::list<part>::iterator it;
+	
+	Real referPos[3];
+	Real weightScalarGridDown[3];
+	Real weightScalarGridUp[3];
+	Real dx = pcls->res();
+	
+	double mass = coeff / (dx*dx*dx);
+	mass *= *(double*)((char*)pcls->parts_info() + pcls->mass_offset());
+	mass /= a;
+	
+	Real e, f, w;
+	Real * q;
+	size_t offset_q = offsetof(part,vel);
+	
+	Real  tij[6];           // local cube
+	Real  tii[24];          // local cube
+	Real  localCubePhi[8];
+	
+	for (int i=0; i<8; i++) localCubePhi[i] = 0;
 
+	for (xPart.first(),xTij.first(); xPart.test(); xPart.next(),xTij.next())
+	{
+		if (pcls->field()(xPart).size != 0)
+		{
+			for (int i=0;i<3;i++)
+				referPos[i] = (double)xPart.coord(i)*dx;
+			
+			for (int i=0; i<6; i++)  tij[i]=0.0;
+			for (int i=0; i<24; i++) tii[i]=0.0;
+			
+			for (it=(pcls->field())(xPart).parts.begin(); it != (pcls->field())(xPart).parts.end(); ++it)
+			{
+				for (int i =0; i<3; i++)
+				{
+					weightScalarGridUp[i] = ((*it).pos[i] - referPos[i]) / dx;
+					weightScalarGridDown[i] = 1.0l - weightScalarGridUp[i];
+				}
+								
+				q = (Real*)((char*)&(*it)+offset_q);
+                
+				// diagonal components				
+				for (int i=0; i<3; i++)
+				{
+					w = q[i] * q[i];
+					//000
+					tii[0+i*8] += w * weightScalarGridDown[0] * weightScalarGridDown[1] * weightScalarGridDown[2] ;
+					//001
+					tii[1+i*8] += w * weightScalarGridDown[0] * weightScalarGridDown[1] * weightScalarGridUp[2]; 
+					//010
+					tii[2+i*8] += w * weightScalarGridDown[0] * weightScalarGridUp[1]   * weightScalarGridDown[2];
+					//011
+					tii[3+i*8] += w * weightScalarGridDown[0] * weightScalarGridUp[1]   * weightScalarGridUp[2] ;
+					//100
+					tii[4+i*8] += w * weightScalarGridUp[0]   * weightScalarGridDown[1] * weightScalarGridDown[2];
+					//101
+					tii[5+i*8] += w * weightScalarGridUp[0]   * weightScalarGridDown[1] * weightScalarGridUp[2];
+					//110
+					tii[6+i*8] += w * weightScalarGridUp[0]   * weightScalarGridUp[1]   * weightScalarGridDown[2];
+					//111
+					tii[7+i*8] += w * weightScalarGridUp[0]   * weightScalarGridUp[1]   * weightScalarGridUp[2];
+				}		
+    		}
+            for (int i=0; i<3; i++) (*Tij)(xTij,i,i) += tii[8*i];
+			(*Tij)(xTij,0,1) += tij[0];
+			(*Tij)(xTij,0,2) += tij[2];
+			(*Tij)(xTij,1,2) += tij[4];
+			
+			for (int i=0; i<3; i++) (*Tij)(xTij+0,i,i) += tii[4+8*i];
+			(*Tij)(xTij+0,1,2) += tij[5];
+			
+			for (int i=0; i<3; i++) (*Tij)(xTij+1,i,i) += tii[2+8*i];
+			(*Tij)(xTij+1,0,2) += tij[3];
+			
+			for (int i=0; i<3; i++) (*Tij)(xTij+2,i,i) += tii[1+8*i];
+			(*Tij)(xTij+2,0,1) += tij[1];
+			
+			for (int i=0; i<3; i++) (*Tij)(xTij+0+1,i,i) += tii[6+8*i];
+			for (int i=0; i<3; i++) (*Tij)(xTij+0+2,i,i) += tii[5+8*i];
+			for (int i=0; i<3; i++) (*Tij)(xTij+1+2,i,i) += tii[3+8*i];
+			for (int i=0; <3; i++) (*Tij)(xTij+0+1+2,i,i) += tii[7+8*i];		
+    	} 
+    }
+}
+#ifndef projection_Tij_comm
+#define projection_Tij_comm symtensorProjectionCICNGP_comm
+#endif
+*/
 //////////////////////////
 // projection_Ti0_project
 //////////////////////////
