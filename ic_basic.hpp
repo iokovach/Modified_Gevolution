@@ -1913,24 +1913,15 @@ void generateIC_basic(metadata & sim, icsettings & ic, cosmology & cosmo, const 
 		loadPhiTransferFunction(ic.tkfile, tk_phi, sim.boxsize, cosmo.h);
 
 		for (i = 0; i < tk_d1->size; i++) // construct phi
-			//temp1[i] = (1.5* (Hconf(a, dm, rad, dcdm, fourpiG, cosmo) * Hconf(a, dm, rad, dcdm, fourpiG, cosmo) - Hconf(1., 0., 1., 0., fourpiG, cosmo) * Hconf(1., 0., 1., 0., fourpiG, cosmo) * a * a * cosmo.Omega_Lambda) * tk_d1->y[i] + rescale * tk_t1->y[i] /tk_t1->x[i]/tk_t1->x[i] ) * M_PI * sqrt(Pk_primordial(tk_d1->x[i] * cosmo.h / sim.boxsize, ic) / tk_d1->x[i])/tk_d1->x[i] ;
-			//temp1[i] = ( 1e-10 * rescale * tk_t1->y[i] /tk_t1->x[i]/tk_t1->x[i] ) * M_PI * sqrt(Pk_primordial(tk_d1->x[i] * cosmo.h / sim.boxsize, ic) / tk_d1->x[i])/tk_d1->x[i] ;
 			temp1[i] = -tk_phi->y[i] * tk_d1->x[i] *tk_d1->x[i] *M_PI * sqrt(Pk_primordial(tk_d1->x[i] * cosmo.h / sim.boxsize, ic) / tk_d1->x[i]) / tk_d1->x[i] ;
 			
-		for (i = 0; i < tk_t1->size; i++) // construct gauge correction for N-body gauge (3 Hconf theta_tot / k^2)
-			
-			temp2[i] = -3. * Hconf(a, dm, rad, dcdm, fourpiG, cosmo)  * M_PI * tk_t1->y[i] * sqrt(Pk_primordial(tk_d1->x[i] * cosmo.h / sim.boxsize, ic) / tk_d1->x[i]) / tk_d1->x[i] / tk_d1->x[i] / tk_d1->x[i];
-
-			
-		nbspline = gsl_spline_alloc(gsl_interp_cspline, tk_t1->size);
-		gsl_spline_init(nbspline, tk_t1->x, temp2, tk_t1->size);
 
 		if (sim.gr_flag == 0) 
 		{
 			for (i = 0; i < tk_t1->size; i++) // construct gauge correction for N-body gauge (3 Hconf theta_tot / k^2)
 			
 				temp2[i] = -3. * Hconf(a, dm, rad, dcdm, fourpiG, cosmo)  * M_PI * tk_t1->y[i] * sqrt(Pk_primordial(tk_d1->x[i] * cosmo.h / sim.boxsize, ic) / tk_d1->x[i]) / tk_d1->x[i] / tk_d1->x[i] / tk_d1->x[i];
-
+                //temp2[i] = 0.;
 				
 			nbspline = gsl_spline_alloc(gsl_interp_cspline, tk_t1->size);
 			gsl_spline_init(nbspline, tk_t1->x, temp2, tk_t1->size);
