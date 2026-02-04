@@ -1852,7 +1852,6 @@ void generateIC_basic(metadata & sim, icsettings & ic, cosmology & cosmo, const 
 	
 	ic_fields[0] = chi;
 	ic_fields[1] = phi;
-
 	
 	loadHomogeneousTemplate(ic.pclfile[0], sim.numpcl[0], pcldata);
 	
@@ -1881,7 +1880,7 @@ void generateIC_basic(metadata & sim, icsettings & ic, cosmology & cosmo, const 
 		
 		temp1 = (double *) malloc(pkspline->size * sizeof(double));
 		temp2 = (double *) malloc(pkspline->size * sizeof(double));
-		
+
 		for (i = 0; i < pkspline->size; i++)
 		{
 			temp1[i] = pkspline->x[i];
@@ -1913,15 +1912,13 @@ void generateIC_basic(metadata & sim, icsettings & ic, cosmology & cosmo, const 
 		loadPhiTransferFunction(ic.tkfile, tk_phi, sim.boxsize, cosmo.h);
 
 		for (i = 0; i < tk_d1->size; i++) // construct phi
-			temp1[i] = -tk_phi->y[i] * tk_d1->x[i] *tk_d1->x[i] *M_PI * sqrt(Pk_primordial(tk_d1->x[i] * cosmo.h / sim.boxsize, ic) / tk_d1->x[i]) / tk_d1->x[i] ;
-			
+			temp1[i] = -tk_phi->y[i] *M_PI * sqrt(Pk_primordial(tk_d1->x[i] * cosmo.h / sim.boxsize, ic) / tk_d1->x[i]) / tk_d1->x[i] ;
 
 		if (sim.gr_flag == 0) 
 		{
 			for (i = 0; i < tk_t1->size; i++) // construct gauge correction for N-body gauge (3 Hconf theta_tot / k^2)
 			
 				temp2[i] = -3. * Hconf(a, dm, rad, dcdm, fourpiG, cosmo)  * M_PI * tk_t1->y[i] * sqrt(Pk_primordial(tk_d1->x[i] * cosmo.h / sim.boxsize, ic) / tk_d1->x[i]) / tk_d1->x[i] / tk_d1->x[i] / tk_d1->x[i];
-                //temp2[i] = 0.;
 				
 			nbspline = gsl_spline_alloc(gsl_interp_cspline, tk_t1->size);
 			gsl_spline_init(nbspline, tk_t1->x, temp2, tk_t1->size);
@@ -1960,9 +1957,9 @@ void generateIC_basic(metadata & sim, icsettings & ic, cosmology & cosmo, const 
 		if (sim.baryon_flag == 2)	// baryon treatment = blend; compute displacement & velocity from weighted average
 		{
 			if (sim.gr_flag > 0)
-			{
+			{   // removed division by k^2 on pkspline here since pkspline is now phi rather than phi*k^2
 				for (i = 0; i < tk_d1->size; i++)
-					temp1[i] =-3. * pkspline->y[i] / pkspline->x[i] / pkspline->x[i]  - (((dm+dcdm) * tk_d1->y[i] + cosmo.Omega_b * tk_d2->y[i]) / ((dm+dcdm) + cosmo.Omega_b)) * M_PI * sqrt(Pk_primordial(tk_d1->x[i] * cosmo.h / sim.boxsize, ic) / tk_d1->x[i]) / tk_d1->x[i];
+					temp1[i] =-3. * pkspline->y[i] - (((dm+dcdm) * tk_d1->y[i] + cosmo.Omega_b * tk_d2->y[i]) / ((dm+dcdm) + cosmo.Omega_b)) * M_PI * sqrt(Pk_primordial(tk_d1->x[i] * cosmo.h / sim.boxsize, ic) / tk_d1->x[i]) / tk_d1->x[i];
 			}
 			else
 			{
@@ -2096,7 +2093,7 @@ void generateIC_basic(metadata & sim, icsettings & ic, cosmology & cosmo, const 
 			if (sim.gr_flag > 0)
 			{
 				for (i = 0; i < tk_d1->size; i++)
-					temp1[i] = -3. * pkspline->y[i] / pkspline->x[i] / pkspline->x[i] - tk_d1->y[i] * M_PI * sqrt(Pk_primordial(tk_d1->x[i] * cosmo.h / sim.boxsize, ic) / tk_d1->x[i]) / tk_d1->x[i];
+					temp1[i] = -3. * pkspline->y[i] - tk_d1->y[i] * M_PI * sqrt(Pk_primordial(tk_d1->x[i] * cosmo.h / sim.boxsize, ic) / tk_d1->x[i]) / tk_d1->x[i];
 			}
 			else
 			{
@@ -2160,7 +2157,7 @@ void generateIC_basic(metadata & sim, icsettings & ic, cosmology & cosmo, const 
 	if (ic.pkfile[0] == '\0')
 	{
 		plan_source->execute(FFT_FORWARD);
-		generateDisplacementField(*scalarFT, 0., pkspline, (unsigned int) ic.seed, ic.flags & ICFLAG_KSPHERE, 0);
+		generateRealization(*scalarFT, 0., pkspline, (unsigned int) ic.seed, ic.flags & ICFLAG_KSPHERE, 0);
 	}
 	else
 	{
@@ -2181,9 +2178,7 @@ void generateIC_basic(metadata & sim, icsettings & ic, cosmology & cosmo, const 
 		if (kFT.coord(0) == 0 && kFT.coord(1) == 0 && kFT.coord(2) == 0)
 			(*scalarFT)(kFT) = Cplx(0.,0.);
 				
-		//cout << "Solving Modified P" << endl;
 		solveModifiedPoissonFT(*scalarFT, *scalarFT, fourpiG / a, 3. * sim.gr_flag * (Hconf(a, dm, rad, dcdm, fourpiG, cosmo) * Hconf(a, dm, rad, dcdm, fourpiG, cosmo) + fourpiG * cosmo.Omega_m / a));
-		//solveModifiedPoissonFT(*scalarFT, *scalarFT, fourpiG / a, 0);
 	}
 	
 	plan_phi->execute(FFT_BACKWARD);
